@@ -26,12 +26,36 @@
     state: present
   register: wireguard__register_module_enabled
   until: wireguard__register_module_enabled is succeeded
-  retries: 10
+  retries: 0
   delay: 10
   failed_when: wireguard__register_module_enabled is failure
   tags:
     - wg-install
   when: not ansible_os_family == 'Darwin'
+  ignore_errors: true
+
+# TODO: make this step configurable.
+- name: Install WireGuard userspace program
+  ansible.builtin.package:
+    name: wireguard-go
+    state: present
+  register: wireguard__userspace_installed
+  until: wireguard__userspace_installed is succeeded
+  failed_when: wireguard__userspace_installed is failure
+  tags:
+    - wg-install
+  when: not ansible_os_family == 'Darwin' and wireguard__register_module_enabled is failed
+
+# TODO: put that line it at the correct section.
+# TODO: run systemctl daemon-reload.
+- name: Adjust wg-quick to use userspace implementation
+  ansible.builtin.lineinfile:
+    line: Environment=WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard
+    state: present
+    path: /lib/systemd/system/wg-quick@.service
+  tags:
+    - wg-install
+  when: not ansible_os_family == 'Darwin' and wireguard__register_module_enabled is failed
 
 - name: Set default for WireGuard interface restart behavior
   ansible.builtin.set_fact:
@@ -99,14 +123,14 @@
       ansible.builtin.command: "wg genkey"
       register: wireguard__register_private_key
       changed_when: false
-      no_log: '{{ ansible_verbosity < 3 }}'
+      no_log: "{{ ansible_verbosity < 3 }}"
       tags:
         - wg-generate-keys
 
     - name: Set private key fact
       ansible.builtin.set_fact:
         wireguard_private_key: "{{ wireguard__register_private_key.stdout }}"
-      no_log: '{{ ansible_verbosity < 3 }}'
+      no_log: "{{ ansible_verbosity < 3 }}"
       tags:
         - wg-generate-keys
 
@@ -119,14 +143,14 @@
       ansible.builtin.slurp:
         src: "{{ wireguard_remote_directory }}/{{ wireguard_interface }}.conf"
       register: wireguard__register_config
-      no_log: '{{ ansible_verbosity < 3 }}'
+      no_log: "{{ ansible_verbosity < 3 }}"
       tags:
         - wg-config
 
     - name: Set private key fact
       ansible.builtin.set_fact:
         wireguard_private_key: "{{ wireguard__register_config['content'] | b64decode | regex_findall('PrivateKey = (.*)') | first }}"
-      no_log: '{{ ansible_verbosity < 3 }}'
+      no_log: "{{ ansible_verbosity < 3 }}"
       tags:
         - wg-config
 
@@ -137,7 +161,7 @@
   register: wireguard__register_public_key
   changed_when: false
   check_mode: false
-  no_log: '{{ ansible_verbosity < 3 }}'
+  no_log: "{{ ansible_verbosity < 3 }}"
   tags:
     - wg-config
 
@@ -162,7 +186,7 @@
     owner: "{{ wireguard_conf_owner }}"
     group: "{{ wireguard_conf_group }}"
     mode: "{{ wireguard_conf_mode }}"
-  no_log: '{{ ansible_verbosity < 3 }}'
+  no_log: "{{ ansible_verbosity < 3 }}"
   tags:
     - wg-config
   notify:
