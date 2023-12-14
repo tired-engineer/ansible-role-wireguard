@@ -46,13 +46,19 @@
     - wg-install
   when: not ansible_os_family == 'Darwin' and wireguard__register_module_enabled is failed
 
-# TODO: put that line it at the correct section.
-# TODO: run systemctl daemon-reload.
 - name: Adjust wg-quick to use userspace implementation
   ansible.builtin.lineinfile:
     line: Environment=WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard
     state: present
     path: /lib/systemd/system/wg-quick@.service
+    insertafter: [Service]
+  tags:
+    - wg-install
+  when: not ansible_os_family == 'Darwin' and wireguard__register_module_enabled is failed
+
+- name: Run systemctl reload.
+  ansible.builtin.systemd:
+    daemon_reload: yes
   tags:
     - wg-install
   when: not ansible_os_family == 'Darwin' and wireguard__register_module_enabled is failed
