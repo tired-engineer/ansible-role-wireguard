@@ -51,7 +51,7 @@
     line: Environment=WG_QUICK_USERSPACE_IMPLEMENTATION=wireguard
     state: present
     path: /lib/systemd/system/wg-quick@.service
-    insertafter: [Service]
+    insertafter: ^\[Service\]
   tags:
     - wg-install
   when: not ansible_os_family == 'Darwin' and wireguard__register_module_enabled is failed
