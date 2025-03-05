@@ -51,12 +51,19 @@ PostDown = {{ wg_postdown }}
 {% if wireguard_save_config is defined %}
 SaveConfig = {{ wireguard_save_config }}
 {% endif %}
-{% for host in ansible_play_hosts %}
-{%   if host != inventory_hostname %}
+
+
+{% for host in groups['wireguard'] %}
+{%   if host != inventory_hostname and (hostvars[host].wireguard__fact_public_key is defined or hostvars[host].get('wireguard__host_reachable', {}) is failed) %}
 
 [Peer]
 # Name = {{ host }}
+{% if hostvars[host].wireguard__fact_public_key is defined %}
 PublicKey = {{hostvars[host].wireguard__fact_public_key}}
+{% else %}
+# Host is unreachable and no stored public key was found
+# PublicKey entry is skipped, configuration is incomplete
+{% endif %}
 {%     if hostvars[host].wireguard_allowed_ips is defined %}
 AllowedIPs = {{hostvars[host].wireguard_allowed_ips}}
 {%     else %}

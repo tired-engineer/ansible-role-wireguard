@@ -71,6 +71,15 @@ wireguard_interface_restart: false
 # the package manager in question supports this option)
 wireguard_update_cache: "true"
 
+# Directory to store public keys for future reference, even if hosts are unreachable
+# This helps maintain configuration when some hosts are offline
+# The default location is in the user's home directory to avoid sudo requirements
+wireguard_pubkeys_directory: "{{ lookup('env', 'HOME') }}/.wireguard/pubkeys"
+
+# Whether to skip unreachable hosts and use stored public keys
+# When set to true, the role will try to use previously stored public keys for unreachable hosts
+wireguard_handle_unreachable: true
+
 #######################################
 # Settings only relevant for:
 # - Ubuntu

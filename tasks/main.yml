@@ -2,8 +2,58 @@
 # Copyright (C) 2018-2023 Robert Wimmer
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+- name: Check if host is reachable
+  ansible.builtin.ping:
+  register: wireguard__host_reachable
+  ignore_unreachable: true
+  ignore_errors: true
+  when: wireguard_handle_unreachable | bool
+  tags:
+    - wg-config
+    - wg-generate-keys
+
+- name: Load stored public key if host is unreachable
+  when: wireguard_handle_unreachable | bool and wireguard__host_reachable is failed
+  block:
+    - name: Check if stored public key exists for unreachable host
+      ansible.builtin.stat:
+        path: "{{ wireguard_pubkeys_directory }}/{{ inventory_hostname }}.pub"
+      register: wireguard__stored_pubkey_stat
+      delegate_to: localhost
+      become: false
+      tags:
+        - wg-config
+        - wg-generate-keys
+
+    - name: Load stored public key for unreachable host
+      when: wireguard__stored_pubkey_stat.stat.exists
+      block:
+        - name: Read stored public key
+          ansible.builtin.slurp:
+            src: "{{ wireguard_pubkeys_directory }}/{{ inventory_hostname }}.pub"
+          register: wireguard__stored_pubkey
+          delegate_to: localhost
+          become: false
+          tags:
+            - wg-config
+            - wg-generate-keys
+
+        - name: Set public key fact for unreachable host
+          ansible.builtin.set_fact:
+            wireguard__fact_public_key: "{{ wireguard__stored_pubkey['content'] | b64decode | trim }}"
+          tags:
+            - wg-config
+            - wg-generate-keys
+
+        - name: Skip further tasks for unreachable host
+          ansible.builtin.meta: end_host
+          tags:
+            - wg-config
+            - wg-generate-keys
+
 - name: Gather instance facts
   ansible.builtin.setup:
+  when: wireguard__host_reachable is not failed
 
 - name: Include tasks depending on OS
   ansible.builtin.include_tasks:
@@ -177,6 +227,22 @@
   tags:
     - wg-config
 
+- name: Ensure public key directory exists on remote host
+  ansible.builtin.file:
+    path: "{{ wireguard_remote_directory }}/pubkeys"
+    state: directory
+    mode: 0755
+  tags:
+    - wg-config
+
+- name: Store public key on remote host
+  ansible.builtin.copy:
+    content: "{{ wireguard__fact_public_key }}"
+    dest: "{{ wireguard_remote_directory }}/pubkeys/{{ inventory_hostname }}.pub"
+    mode: 0644
+  tags:
+    - wg-config
+
 - name: Create WireGuard configuration directory
   ansible.builtin.file:
     dest: "{{ wireguard_remote_directory }}"
@@ -202,6 +268,37 @@
   ansible.builtin.file:
     dest: "{{ wireguard_remote_directory }}/.reload-module-on-update"
     state: absent
+  tags:
+    - wg-config
+
+- name: Create local directory for storing WireGuard public keys
+  ansible.builtin.file:
+    path: "{{ wireguard_pubkeys_directory }}"
+    state: directory
+    mode: 0755
+  delegate_to: localhost
+  become: false
+  run_once: true
+  tags:
+    - wg-config
+
+- name: Store public keys locally
+  ansible.builtin.copy:
+    content: "{{ wireguard__fact_public_key }}"
+    dest: "{{ wireguard_pubkeys_directory }}/{{ inventory_hostname }}.pub"
+    mode: 0644
+  delegate_to: localhost
+  become: false
+  tags:
+    - wg-config
+
+- name: Fetch remote public keys to local controller
+  ansible.builtin.fetch:
+    src: "{{ wireguard_remote_directory }}/pubkeys/{{ inventory_hostname }}.pub"
+    dest: "{{ wireguard_pubkeys_directory }}/"
+    flat: yes
+  ignore_errors: yes  # Don't fail if the file doesn't exist yet
+  become: true
   tags:
     - wg-config
 

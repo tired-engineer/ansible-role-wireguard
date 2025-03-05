@@ -194,7 +194,7 @@ wireguard_service_state: "started"
 #
 # So it depends a little bit on your setup which option works best. If you
 # don't have an overly complicated routing that changes very often or at all
-# using "false" here is most properly good enough for you. E.g. if you just
+# using "false" here is most probably good enough for you. E.g. if you just
 # want to connect a few servers via VPN and it normally stays this way.
 #
 # If you have a more dynamic routing setup then setting this to "true" might be
@@ -212,7 +212,36 @@ wireguard_interface_restart: false
 # Set to "false" if package cache should not be updated (only relevant if
 # the package manager in question supports this option)
 wireguard_update_cache: "true"
+
+Unreachable Hosts Handling
+-------------------------
+
+This role includes a feature to handle unreachable hosts efficiently. In mesh VPN setups, it's common for some hosts to be temporarily unreachable, which could otherwise cause the playbook to hang or take a long time to complete.
+
+When a host is unreachable, the role can:
+1. Skip the unreachable host but keep its peer configuration intact in other hosts' configs
+2. Reuse previously stored public keys rather than attempting to derive them from the private key on the unreachable host
+
+This behavior is controlled by these variables:
+
+```yaml
+# Whether to handle unreachable hosts by using cached public keys
+# Default: true
+wireguard_handle_unreachable: true
+
+# Directory to store public keys for future reference
+# Default location is in the user's home directory to avoid sudo requirements
+# Default: "{{ lookup('env', 'HOME') }}/.wireguard/pubkeys"
+wireguard_pubkeys_directory: "/path/to/your/keys/storage"
 ```
+
+The role will:
+- Store public keys locally (on the Ansible controller) in a non-privileged directory
+- Check if a host is reachable before attempting to configure it
+- For unreachable hosts, use stored public keys if available
+- Continue configuring other hosts with the stored public keys from unreachable hosts
+
+This provides significant performance improvements when dealing with partially available infrastructure while maintaining the correct mesh VPN configuration.
 
 There are also a few Linux distribution specific settings:
 
